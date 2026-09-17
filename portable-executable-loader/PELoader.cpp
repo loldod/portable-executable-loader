@@ -16,11 +16,12 @@ HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
 	PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((std::byte*)libraryPtr + imageDosHeader->e_lfanew);
 	if (IMAGE_NT_SIGNATURE != imageNtHeaders->Signature) { return NULL; }
 
+	
 	LPVOID virtualImage = VirtualAlloc(
-		NULL,
+		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase, 
 		imageNtHeaders->OptionalHeader.SizeOfImage,
 		MEM_COMMIT | MEM_RESERVE,
-		PAGE_READWRITE
+		PAGE_EXECUTE_READWRITE
 	);
 
 	if (virtualImage == NULL) { return NULL; }
