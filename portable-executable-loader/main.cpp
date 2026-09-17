@@ -14,13 +14,27 @@ int main() {
 	while (file.get(fileByte)) {
 		dllBuffer.push_back((std::byte)fileByte);
 	}
-	HMODULE test = loader.loadLibrary(dllBuffer);
+	file.close();
 
-	std::cout << "test: " << test << std::endl;
-	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)test;
-	std::cout << "test2: " << imageDosHeader->e_magic;
+	HMODULE libraryPtr = loader.loadLibrary(dllBuffer);
+	if (libraryPtr == NULL) { return 1; }
 
-	loader.freeLibrary(test);
+	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)libraryPtr;
+	PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((std::byte*)libraryPtr + imageDosHeader->e_lfanew);
+	PIMAGE_SECTION_HEADER imageSectionHeaders = IMAGE_FIRST_SECTION(imageNtHeaders);
+	DWORD exportDirectoryRVAPtr = imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+	PIMAGE_EXPORT_DIRECTORY imageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((byte*)libraryPtr + exportDirectoryRVAPtr);
+	DWORD functionsCount = imageExportDirectory->NumberOfNames;
+	DWORD* exportFunctionsNamesRVA = (DWORD*)((byte*)libraryPtr + imageExportDirectory->AddressOfNames);
+
+	char* functionName = nullptr;
+
+	for (int i = 0; i < functionsCount; i++) {
+		functionName = (char*)((byte*)libraryPtr + exportFunctionsNamesRVA[i]);
+		std::cout << "function name " << i << ": " << functionName << std::endl;
+	}
+
+	loader.freeLibrary(libraryPtr);
 
 	return 0;
 }
