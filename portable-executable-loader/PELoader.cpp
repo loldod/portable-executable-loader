@@ -48,33 +48,38 @@ void PELoader::mapImageSections(std::byte* sourceImage, std::byte* destinationIm
 	}
 }
 
+void PELoader::loadFunctionImport(std::byte* image, HMODULE importedLibrary, PIMAGE_THUNK_DATA importAddressTable) {
+	PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)(image + importAddressTable->u1.AddressOfData);
+
+	FARPROC importedFunction = GetProcAddress(importedLibrary, importByName->Name);
+	if (importedFunction == NULL) {
+		throw ImportedFunctionNotFoundException("Could not find imported function in library");
+	}
+
+	importAddressTable->u1.Function = (LONGLONG)importedFunction;
+}
+
+void PELoader::loadLibraryImport(std::byte* image, PIMAGE_IMPORT_DESCRIPTOR importDescriptor) {
+	char* libraryName = (char*)(image + importDescriptor->Name);
+	PIMAGE_THUNK_DATA importAddressTable = (PIMAGE_THUNK_DATA)(image + importDescriptor->FirstThunk);
+
+	HMODULE importedLibrary = LoadLibraryA(libraryName);
+	if (importedLibrary == NULL) {
+		throw ImportedFunctionNotFoundException("Could not load imported library");
+	}
+
+	while (importAddressTable->u1.AddressOfData != NULL) {
+		loadFunctionImport(image, importedLibrary, importAddressTable);
+		importAddressTable++;
+	}
+}
+
 void PELoader::loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
 	IMAGE_DATA_DIRECTORY importDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-	
 	PIMAGE_IMPORT_DESCRIPTOR currentImportDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(image + importDirectory.VirtualAddress);
-	char* currentDescriptorName = NULL;
 	
 	while (currentImportDescriptor->Name != NULL) {
-		currentDescriptorName = (char*)(image + currentImportDescriptor->Name);
-		PIMAGE_THUNK_DATA importAddressTable = (PIMAGE_THUNK_DATA)(image + currentImportDescriptor->FirstThunk);
-
-		while (importAddressTable->u1.AddressOfData != NULL) {
-			PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)(image + importAddressTable->u1.AddressOfData);
-
-			HMODULE importedLibrary = LoadLibraryA(currentDescriptorName);
-			if (importedLibrary == NULL) {
-				throw ImportedFunctionNotFoundException("Could not load imported library");
-			}
-			FARPROC importedFunction = GetProcAddress(importedLibrary, importByName->Name);
-			if (importedFunction == NULL) {
-				throw ImportedFunctionNotFoundException("Could not find imported function in library");
-			}
-
-			importAddressTable->u1.Function = (LONGLONG)importedFunction;
-
-			importAddressTable++;
-		}
-		//FreeLibrary(importedLibrary);
+		loadLibraryImport(image, currentImportDescriptor);
 		currentImportDescriptor++;
 	}
 }
@@ -90,6 +95,23 @@ BOOL PELoader::runEntryPoint(HMODULE libraryModule, PIMAGE_NT_HEADERS imageNtHea
 		);
 	}
 	return TRUE;
+}
+
+void PELoader::freeImportedLibraries(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
+	IMAGE_DATA_DIRECTORY importDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+
+	PIMAGE_IMPORT_DESCRIPTOR currentImportDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(image + importDirectory.VirtualAddress);
+	char* libraryName = NULL;
+	HMODULE libraryPtr = NULL;
+
+	while (currentImportDescriptor->Name != NULL) {
+		libraryName = (char*)(image + currentImportDescriptor->Name);
+		libraryPtr = GetModuleHandleA(libraryName);
+		if (libraryPtr) {
+			FreeLibrary(libraryPtr);
+		}
+		currentImportDescriptor++;
+	}
 }
 
 HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
@@ -109,7 +131,8 @@ HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
 
 void PELoader::freeLibrary(HMODULE loadAddress) {
 	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders(loadAddress);
-	runEntryPoint(loadAddress, imageNtHeaders, DLL_PROCESS_DETACH);
 
+	runEntryPoint(loadAddress, imageNtHeaders, DLL_PROCESS_DETACH);
+	freeImportedLibraries((std::byte*)loadAddress, imageNtHeaders);
 	VirtualFree(loadAddress, 0, MEM_RELEASE);
 }
