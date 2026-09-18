@@ -1,4 +1,7 @@
+#pragma comment(lib, "dbghelp.lib")
+
 #include "PELoader.h"
+#include <DbgHelp.h>
 
 typedef BOOL(WINAPI* DLLMAIN)(HINSTANCE, DWORD, LPVOID);
 
@@ -45,6 +48,37 @@ void PELoader::mapImageSections(std::byte* sourceImage, std::byte* destinationIm
 	}
 }
 
+void PELoader::loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
+	IMAGE_DATA_DIRECTORY importDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+	
+	PIMAGE_IMPORT_DESCRIPTOR currentImportDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(image + importDirectory.VirtualAddress);
+	char* currentDescriptorName = NULL;
+	
+	while (currentImportDescriptor->Name != NULL) {
+		currentDescriptorName = (char*)(image + currentImportDescriptor->Name);
+		PIMAGE_THUNK_DATA importAddressTable = (PIMAGE_THUNK_DATA)(image + currentImportDescriptor->FirstThunk);
+
+		while (importAddressTable->u1.AddressOfData != NULL) {
+			PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)(image + importAddressTable->u1.AddressOfData);
+
+			HMODULE importedLibrary = LoadLibraryA(currentDescriptorName);
+			if (importedLibrary == NULL) {
+				throw ImportedFunctionNotFoundException("Could not load imported library");
+			}
+			FARPROC importedFunction = GetProcAddress(importedLibrary, importByName->Name);
+			if (importedFunction == NULL) {
+				throw ImportedFunctionNotFoundException("Could not find imported function in library");
+			}
+
+			importAddressTable->u1.Function = (LONGLONG)importedFunction;
+
+			importAddressTable++;
+		}
+		//FreeLibrary(importedLibrary);
+		currentImportDescriptor++;
+	}
+}
+
 BOOL PELoader::runEntryPoint(HMODULE libraryModule, PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason) {
 	DWORD entryPointRva = imageNtHeaders->OptionalHeader.AddressOfEntryPoint;
 	if (entryPointRva != NULL) {
@@ -65,7 +99,9 @@ HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
 	std::byte* virtualImage = allocateVirtualImage(imageNtHeaders);
 	mapImageHeaders(bufferImagePtr, virtualImage, imageNtHeaders);
 	mapImageSections(bufferImagePtr, virtualImage, imageNtHeaders);
-	
+
+	loadImageImports(virtualImage, imageNtHeaders);
+
 	runEntryPoint((HMODULE)virtualImage, imageNtHeaders, DLL_PROCESS_ATTACH);
 
 	return (HMODULE)virtualImage;
