@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="portable-executable-loader/portable-executable-loader.vcxproj" />
+  <Project Path="portable-executable-loader/portable-executable-loader.vcxproj" Id="5c966437-bed1-47c6-9c5c-d4530f30ebc7" />
 </Solution>
