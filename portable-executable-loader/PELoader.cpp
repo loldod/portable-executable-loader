@@ -3,56 +3,72 @@
 
 typedef BOOL(WINAPI* DLLMAIN)(HINSTANCE, DWORD, LPVOID);
 
-HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
-	if (dllBuffer.size() < sizeof(PIMAGE_DOS_HEADER)) {
-		return NULL;
-	}
-
-	std::byte* bufferImagePtr = dllBuffer.data();
-
-	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)bufferImagePtr;
+PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(HMODULE libraryModule) {
+	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)libraryModule;
 	if (IMAGE_DOS_SIGNATURE != imageDosHeader->e_magic) { return NULL; }
 
-	PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((std::byte*)bufferImagePtr + imageDosHeader->e_lfanew);
+	PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((std::byte*)libraryModule + imageDosHeader->e_lfanew);
 	if (IMAGE_NT_SIGNATURE != imageNtHeaders->Signature) { return NULL; }
-
 	
+	return imageNtHeaders;
+}
+
+std::byte* PELoader::allocateVirtualImage(PIMAGE_NT_HEADERS imageNtHeaders) {
 	std::byte* virtualImage = (std::byte*)VirtualAlloc(
-		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase, 
+		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase,
 		imageNtHeaders->OptionalHeader.SizeOfImage,
 		MEM_COMMIT | MEM_RESERVE,
 		PAGE_EXECUTE_READWRITE
 	);
+	return virtualImage;
+}
 
-	if (virtualImage == NULL) { return NULL; }
-
-	std::memcpy(virtualImage, bufferImagePtr, imageNtHeaders->OptionalHeader.SizeOfHeaders);
-
+void PELoader::mapImageSections(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders) {
 	PIMAGE_SECTION_HEADER imageSectionHeaders = IMAGE_FIRST_SECTION(imageNtHeaders);
 	for (int i = 0; i < imageNtHeaders->FileHeader.NumberOfSections; i++) {
 		IMAGE_SECTION_HEADER currentSectionHeader = imageSectionHeaders[i];
 		std::memcpy(
-			virtualImage + currentSectionHeader.VirtualAddress,
-			bufferImagePtr + currentSectionHeader.PointerToRawData,
+			destinationImage + currentSectionHeader.VirtualAddress,
+			sourceImage + currentSectionHeader.PointerToRawData,
 			currentSectionHeader.SizeOfRawData
 		);
 	}
+}
 
+BOOL PELoader::runEntryPoint(HMODULE libraryModule, PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason) {
 	DWORD entryPointRva = imageNtHeaders->OptionalHeader.AddressOfEntryPoint;
 	if (entryPointRva != NULL) {
-		DLLMAIN dllEntryPoint = (DLLMAIN)((std::byte*)(virtualImage + entryPointRva));
-		dllEntryPoint(
-			(HINSTANCE)virtualImage,
-			DLL_PROCESS_ATTACH,
+		DLLMAIN dllEntryPoint = (DLLMAIN)((std::byte*)libraryModule + entryPointRva);
+		return dllEntryPoint(
+			(HINSTANCE)((std::byte*)libraryModule),
+			fdwReason,
 			NULL
 		);
 	}
+	return TRUE;
+}
+
+HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
+	std::byte* bufferImagePtr = dllBuffer.data();
+	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders((HMODULE)bufferImagePtr);
+	
+	std::byte* virtualImage = allocateVirtualImage(imageNtHeaders);
+	if (virtualImage == NULL) { return NULL; }
+
+	std::memcpy(virtualImage, bufferImagePtr, imageNtHeaders->OptionalHeader.SizeOfHeaders);
+	mapImageSections(bufferImagePtr, virtualImage, imageNtHeaders);
+	runEntryPoint((HMODULE)virtualImage, imageNtHeaders, DLL_PROCESS_ATTACH);
 
 	return (HMODULE)virtualImage;
 }
 
 void PELoader::freeLibrary(HMODULE loadAddress) {
-	if (loadAddress != NULL) {
-		VirtualFree(loadAddress, 0, MEM_RELEASE);
+	if (loadAddress == NULL) {
+		return;
 	}
+
+	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders(loadAddress);
+	runEntryPoint(loadAddress, imageNtHeaders, DLL_PROCESS_DETACH);
+
+	VirtualFree(loadAddress, 0, MEM_RELEASE);
 }
