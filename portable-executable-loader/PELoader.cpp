@@ -1,14 +1,17 @@
 #include "PELoader.h"
-#include <Windows.h>
 
 typedef BOOL(WINAPI* DLLMAIN)(HINSTANCE, DWORD, LPVOID);
 
 PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(HMODULE libraryModule) {
 	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)libraryModule;
-	if (IMAGE_DOS_SIGNATURE != imageDosHeader->e_magic) { return NULL; }
+	if (IMAGE_DOS_SIGNATURE != imageDosHeader->e_magic) {
+		throw InvalidDLLException("DOS header magic is invalid!");
+	}
 
 	PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((std::byte*)libraryModule + imageDosHeader->e_lfanew);
-	if (IMAGE_NT_SIGNATURE != imageNtHeaders->Signature) { return NULL; }
+	if (IMAGE_NT_SIGNATURE != imageNtHeaders->Signature) {
+		throw InvalidDLLException("NT header magic is invalid!");
+	}
 	
 	return imageNtHeaders;
 }
@@ -20,7 +23,14 @@ std::byte* PELoader::allocateVirtualImage(PIMAGE_NT_HEADERS imageNtHeaders) {
 		MEM_COMMIT | MEM_RESERVE,
 		PAGE_EXECUTE_READWRITE
 	);
+	if (virtualImage == NULL) {
+		throw ImageAllocationExcepetion("Cannot allocate virtual image at prefered address");
+	}
 	return virtualImage;
+}
+
+void PELoader::mapImageHeaders(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders) {
+	std::memcpy(destinationImage, sourceImage, imageNtHeaders->OptionalHeader.SizeOfHeaders);
 }
 
 void PELoader::mapImageSections(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders) {
@@ -53,20 +63,15 @@ HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
 	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders((HMODULE)bufferImagePtr);
 	
 	std::byte* virtualImage = allocateVirtualImage(imageNtHeaders);
-	if (virtualImage == NULL) { return NULL; }
-
-	std::memcpy(virtualImage, bufferImagePtr, imageNtHeaders->OptionalHeader.SizeOfHeaders);
+	mapImageHeaders(bufferImagePtr, virtualImage, imageNtHeaders);
 	mapImageSections(bufferImagePtr, virtualImage, imageNtHeaders);
+	
 	runEntryPoint((HMODULE)virtualImage, imageNtHeaders, DLL_PROCESS_ATTACH);
 
 	return (HMODULE)virtualImage;
 }
 
 void PELoader::freeLibrary(HMODULE loadAddress) {
-	if (loadAddress == NULL) {
-		return;
-	}
-
 	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders(loadAddress);
 	runEntryPoint(loadAddress, imageNtHeaders, DLL_PROCESS_DETACH);
 

@@ -5,6 +5,8 @@
 #include "PELoader.h"
 
 int main() {
+	// This file is only for testing
+
 	PELoader loader = PELoader();
 	std::vector<std::byte> dllBuffer = std::vector<std::byte>();
 
@@ -16,8 +18,14 @@ int main() {
 	}
 	file.close();
 
-	HMODULE libraryPtr = loader.loadLibrary(dllBuffer);
-	if (libraryPtr == NULL) { return 1; }
+	HMODULE libraryPtr;
+	try {
+		libraryPtr = loader.loadLibrary(dllBuffer);
+	}
+	catch (const std::runtime_error& e) {
+		std::cerr << "Error: " << e.what() << '\n';
+		return 1;
+	}
 
 	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)libraryPtr;
 	PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((std::byte*)libraryPtr + imageDosHeader->e_lfanew);
