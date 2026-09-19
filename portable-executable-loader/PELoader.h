@@ -20,6 +20,7 @@ private:
 	void loadFunctionImport(std::byte* image, HMODULE importedLibrary, PIMAGE_THUNK_DATA importAddressTable);
 	void loadLibraryImport(std::byte* image, PIMAGE_IMPORT_DESCRIPTOR importDescriptor);
 	void loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders);
+	void loadImageExports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders);
 	
 	void applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders);
 
