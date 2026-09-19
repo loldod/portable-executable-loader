@@ -21,13 +21,13 @@ PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(HMODULE libraryModule) {
 
 std::byte* PELoader::allocateVirtualImage(PIMAGE_NT_HEADERS imageNtHeaders) {
 	std::byte* virtualImage = (std::byte*)VirtualAlloc(
-		NULL,//(LPVOID)imageNtHeaders->OptionalHeader.ImageBase,
+		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase,
 		imageNtHeaders->OptionalHeader.SizeOfImage,
 		MEM_COMMIT | MEM_RESERVE,
 		PAGE_EXECUTE_READWRITE
 	);
 	if (virtualImage == NULL) {
-		throw ImageAllocationExcepetion("Cannot allocate virtual image at prefered address");
+		throw ImageAllocationExcepetion("Cannot allocate virtual image");
 	}
 	return virtualImage;
 }
