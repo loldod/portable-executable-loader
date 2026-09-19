@@ -42,6 +42,10 @@ int main() {
 		std::cout << "function name " << i << ": " << functionName << std::endl;
 	}
 
+	typedef int(WINAPI* MULTIPLEFUNC)(int, int);
+	MULTIPLEFUNC multiple = (MULTIPLEFUNC)loader.getProcAddress(libraryPtr, "multiply");
+	std::cout << "multiple test: " << multiple(6,7);
+
 	loader.freeLibrary(libraryPtr);
 
 	return 0;

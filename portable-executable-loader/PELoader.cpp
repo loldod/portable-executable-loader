@@ -172,3 +172,24 @@ void PELoader::freeLibrary(HMODULE loadAddress) {
 	freeImportedLibraries((std::byte*)loadAddress, imageNtHeaders);
 	VirtualFree(loadAddress, 0, MEM_RELEASE);
 }
+
+FARPROC PELoader::getProcAddress(HMODULE moduleAddress, LPCSTR funcName) {
+	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders(moduleAddress);
+	IMAGE_DATA_DIRECTORY exportDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+	PIMAGE_EXPORT_DIRECTORY imageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((std::byte*)moduleAddress + exportDirectory.VirtualAddress);
+	
+	DWORD* exportFunctionsNamesRVA = (DWORD*)((byte*)moduleAddress + imageExportDirectory->AddressOfNames);
+	DWORD* exportFunctionsAddressesRVA = (DWORD*)((byte*)moduleAddress + imageExportDirectory->AddressOfFunctions);
+
+	LPCSTR exportedFunctionName = NULL;
+
+	for (int i = 0; i < imageExportDirectory->NumberOfNames; i++) {
+		exportedFunctionName = (LPCSTR)((byte*)moduleAddress + exportFunctionsNamesRVA[i]);
+
+		if (strcmp(exportedFunctionName, funcName) == 0) {
+			return (FARPROC)((byte*)moduleAddress + exportFunctionsAddressesRVA[i]);
+		}
+	}
+
+	return NULL;
+}
