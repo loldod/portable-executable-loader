@@ -21,7 +21,7 @@ PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(HMODULE libraryModule) {
 
 std::byte* PELoader::allocateVirtualImage(PIMAGE_NT_HEADERS imageNtHeaders) {
 	std::byte* virtualImage = (std::byte*)VirtualAlloc(
-		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase,
+		NULL,//(LPVOID)imageNtHeaders->OptionalHeader.ImageBase,
 		imageNtHeaders->OptionalHeader.SizeOfImage,
 		MEM_COMMIT | MEM_RESERVE,
 		PAGE_EXECUTE_READWRITE
@@ -84,6 +84,41 @@ void PELoader::loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeade
 	}
 }
 
+void PELoader::applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
+	ULONGLONG baseAddressDifference = (ULONGLONG)image - imageNtHeaders->OptionalHeader.ImageBase;
+	if (baseAddressDifference == 0) {
+		return;
+	}
+
+	IMAGE_DATA_DIRECTORY relocationDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+	PIMAGE_BASE_RELOCATION imageBaseRelocation = (PIMAGE_BASE_RELOCATION)(image + relocationDirectory.VirtualAddress);
+
+	while (imageBaseRelocation->VirtualAddress != NULL) {
+		DWORD relocationEntriesCount = (imageBaseRelocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+		WORD* relocationEntries = (WORD*)((std::byte*)imageBaseRelocation + sizeof(PIMAGE_BASE_RELOCATION));
+
+		for (int i = 0; i < relocationEntriesCount; i++) {
+			WORD entryType = relocationEntries[i] >> 12;
+			WORD entryOffset = relocationEntries[i] & 0x0FFF;
+
+			if (entryType == IMAGE_REL_BASED_ABSOLUTE) {
+				continue;
+			}
+
+			std::byte* relocationAddress = image + imageBaseRelocation->VirtualAddress + entryOffset;
+
+			if (entryType == IMAGE_REL_BASED_DIR64) {
+				*(ULONG_PTR*)(relocationAddress) += baseAddressDifference;
+			}
+			else if (entryType == IMAGE_REL_BASED_HIGHLOW) {
+				*(DWORD*)(relocationAddress) += baseAddressDifference;
+			}
+		}
+
+		imageBaseRelocation += imageBaseRelocation->SizeOfBlock;
+	}
+}
+
 BOOL PELoader::runEntryPoint(HMODULE libraryModule, PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason) {
 	DWORD entryPointRva = imageNtHeaders->OptionalHeader.AddressOfEntryPoint;
 	if (entryPointRva != NULL) {
@@ -121,7 +156,8 @@ HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
 	std::byte* virtualImage = allocateVirtualImage(imageNtHeaders);
 	mapImageHeaders(bufferImagePtr, virtualImage, imageNtHeaders);
 	mapImageSections(bufferImagePtr, virtualImage, imageNtHeaders);
-
+	
+	applyRelocationFixes(virtualImage, imageNtHeaders);
 	loadImageImports(virtualImage, imageNtHeaders);
 
 	runEntryPoint((HMODULE)virtualImage, imageNtHeaders, DLL_PROCESS_ATTACH);
