@@ -84,13 +84,6 @@ void PELoader::loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeade
 	}
 }
 
-void PELoader::loadImageExports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
-	IMAGE_DATA_DIRECTORY exportDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-	PIMAGE_EXPORT_DIRECTORY imageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)(image + exportDirectory.VirtualAddress);
-
-	int i = 1;
-}
-
 void PELoader::applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
 	ULONGLONG baseAddressDifference = (ULONGLONG)image - imageNtHeaders->OptionalHeader.ImageBase;
 	IMAGE_DATA_DIRECTORY relocationDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
@@ -166,7 +159,6 @@ HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
 	
 	applyRelocationFixes(virtualImage, imageNtHeaders);
 	loadImageImports(virtualImage, imageNtHeaders);
-	loadImageExports(virtualImage, imageNtHeaders);
 
 	runEntryPoint((HMODULE)virtualImage, imageNtHeaders, DLL_PROCESS_ATTACH);
 
