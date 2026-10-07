@@ -20,7 +20,7 @@ int main() {
 
 	HMODULE libraryPtr;
 	try {
-		libraryPtr = loader.loadLibrary(dllBuffer);
+		libraryPtr = loader.loadLibrary(dllBuffer.data());
 	}
 	catch (const std::runtime_error& e) {
 		std::cerr << "Error: " << e.what() << '\n';

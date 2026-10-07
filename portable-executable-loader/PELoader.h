@@ -10,25 +10,25 @@
 class PELoader
 {
 public:
-	HMODULE loadLibrary(std::vector<std::byte> dllBuffer);
+	HMODULE loadLibrary(const std::byte* dllBuffer);
 	void freeLibrary(HMODULE loadAddress);
 	FARPROC getProcAddress(HMODULE moduleAddress, LPCSTR funcName);
 
 private:
-	PIMAGE_NT_HEADERS getImageNtHeaders(HMODULE libraryModule);
-	std::byte* allocateVirtualImage(PIMAGE_NT_HEADERS imageNtHeaders);
-	void mapImageHeaders(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders);
-	void mapImageSections(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders);
+	PIMAGE_NT_HEADERS getImageNtHeaders(const HMODULE libraryModule);
+	std::byte* allocateVirtualImage(const PIMAGE_NT_HEADERS imageNtHeaders);
+	void mapImageHeaders(const std::byte* sourceImage, std::byte* destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders);
+	void mapImageSections(const std::byte* sourceImage, std::byte* destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders);
 	
-	void loadFunctionImport(std::byte* image, HMODULE importedLibrary, PIMAGE_THUNK_DATA importAddressTable);
-	void loadLibraryImport(std::byte* image, PIMAGE_IMPORT_DESCRIPTOR importDescriptor);
-	void loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders);
+	void loadFunctionImport(std::byte* image, const HMODULE importedLibrary, const PIMAGE_THUNK_DATA importAddressTable);
+	void loadLibraryImport(std::byte* image, const PIMAGE_IMPORT_DESCRIPTOR importDescriptor);
+	void loadImageImports(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders);
 	
-	void applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders);
+	void applyRelocationFixes(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders);
 
-	BOOL runEntryPoint(HMODULE libraryModule, PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason);
+	BOOL runEntryPoint(const HMODULE libraryModule, const PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason);
 	
-	void freeImportedLibraries(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders);
+	void freeImportedLibraries(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders);
 };
 
 

@@ -1,11 +1,8 @@
-#pragma comment(lib, "dbghelp.lib")
-
 #include "PELoader.h"
-#include <DbgHelp.h>
 
 typedef BOOL(WINAPI* DLLMAIN)(HINSTANCE, DWORD, LPVOID);
 
-PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(HMODULE libraryModule) {
+PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(const HMODULE libraryModule) {
 	PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)libraryModule;
 	if (IMAGE_DOS_SIGNATURE != imageDosHeader->e_magic) {
 		throw InvalidDLLException("DOS header magic is invalid!");
@@ -19,24 +16,32 @@ PIMAGE_NT_HEADERS PELoader::getImageNtHeaders(HMODULE libraryModule) {
 	return imageNtHeaders;
 }
 
-std::byte* PELoader::allocateVirtualImage(PIMAGE_NT_HEADERS imageNtHeaders) {
+std::byte* PELoader::allocateVirtualImage(const PIMAGE_NT_HEADERS imageNtHeaders) {
 	std::byte* virtualImage = (std::byte*)VirtualAlloc(
-		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase,
+		(LPVOID)imageNtHeaders->OptionalHeader.ImageBase, // allocate at preferred address 
 		imageNtHeaders->OptionalHeader.SizeOfImage,
 		MEM_COMMIT | MEM_RESERVE,
 		PAGE_EXECUTE_READWRITE
 	);
 	if (virtualImage == NULL) {
-		throw ImageAllocationExcepetion("Cannot allocate virtual image");
+		virtualImage = (std::byte*)VirtualAlloc( 
+			NULL, // allocate at random address
+			imageNtHeaders->OptionalHeader.SizeOfImage,
+			MEM_COMMIT | MEM_RESERVE,
+			PAGE_EXECUTE_READWRITE
+		);
+		if (virtualImage == NULL) {
+			throw ImageAllocationExcepetion("Cannot allocate virtual image");
+		}
 	}
 	return virtualImage;
 }
 
-void PELoader::mapImageHeaders(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders) {
+void PELoader::mapImageHeaders(const std::byte* sourceImage, std::byte* destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders) {
 	std::memcpy(destinationImage, sourceImage, imageNtHeaders->OptionalHeader.SizeOfHeaders);
 }
 
-void PELoader::mapImageSections(std::byte* sourceImage, std::byte* destinationImage, PIMAGE_NT_HEADERS imageNtHeaders) {
+void PELoader::mapImageSections(const std::byte* sourceImage, std::byte* destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders) {
 	PIMAGE_SECTION_HEADER imageSectionHeaders = IMAGE_FIRST_SECTION(imageNtHeaders);
 	for (int i = 0; i < imageNtHeaders->FileHeader.NumberOfSections; i++) {
 		IMAGE_SECTION_HEADER currentSectionHeader = imageSectionHeaders[i];
@@ -48,7 +53,7 @@ void PELoader::mapImageSections(std::byte* sourceImage, std::byte* destinationIm
 	}
 }
 
-void PELoader::loadFunctionImport(std::byte* image, HMODULE importedLibrary, PIMAGE_THUNK_DATA importAddressTable) {
+void PELoader::loadFunctionImport(std::byte* image, const HMODULE importedLibrary, const PIMAGE_THUNK_DATA importAddressTable) {
 	PIMAGE_IMPORT_BY_NAME importByName = (PIMAGE_IMPORT_BY_NAME)(image + importAddressTable->u1.AddressOfData);
 
 	FARPROC importedFunction = GetProcAddress(importedLibrary, importByName->Name);
@@ -59,7 +64,7 @@ void PELoader::loadFunctionImport(std::byte* image, HMODULE importedLibrary, PIM
 	importAddressTable->u1.Function = (LONGLONG)importedFunction;
 }
 
-void PELoader::loadLibraryImport(std::byte* image, PIMAGE_IMPORT_DESCRIPTOR importDescriptor) {
+void PELoader::loadLibraryImport(std::byte* image, const PIMAGE_IMPORT_DESCRIPTOR importDescriptor) {
 	char* libraryName = (char*)(image + importDescriptor->Name);
 	PIMAGE_THUNK_DATA importAddressTable = (PIMAGE_THUNK_DATA)(image + importDescriptor->FirstThunk);
 
@@ -74,7 +79,7 @@ void PELoader::loadLibraryImport(std::byte* image, PIMAGE_IMPORT_DESCRIPTOR impo
 	}
 }
 
-void PELoader::loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
+void PELoader::loadImageImports(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders) {
 	IMAGE_DATA_DIRECTORY importDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 	PIMAGE_IMPORT_DESCRIPTOR currentImportDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(image + importDirectory.VirtualAddress);
 	
@@ -84,7 +89,7 @@ void PELoader::loadImageImports(std::byte* image, PIMAGE_NT_HEADERS imageNtHeade
 	}
 }
 
-void PELoader::applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtHeaders) {
+void PELoader::applyRelocationFixes(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders) {
 	ULONGLONG baseAddressDifference = (ULONGLONG)image - imageNtHeaders->OptionalHeader.ImageBase;
 	IMAGE_DATA_DIRECTORY relocationDirectory = (IMAGE_DATA_DIRECTORY)imageNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 	PIMAGE_BASE_RELOCATION imageBaseRelocation = (PIMAGE_BASE_RELOCATION)(image + relocationDirectory.VirtualAddress);
@@ -119,7 +124,7 @@ void PELoader::applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtH
 	}
 }
 
-BOOL PELoader::runEntryPoint(HMODULE libraryModule, PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason) {
+BOOL PELoader::runEntryPoint(const HMODULE libraryModule, const PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason) {
 	DWORD entryPointRva = imageNtHeaders->OptionalHeader.AddressOfEntryPoint;
 	if (entryPointRva != NULL) {
 		DLLMAIN dllEntryPoint = (DLLMAIN)((std::byte*)libraryModule + entryPointRva);
@@ -149,13 +154,12 @@ void PELoader::freeImportedLibraries(std::byte* image, PIMAGE_NT_HEADERS imageNt
 	}
 }
 
-HMODULE PELoader::loadLibrary(std::vector<std::byte> dllBuffer) {
-	std::byte* bufferImagePtr = dllBuffer.data();
-	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders((HMODULE)bufferImagePtr);
+HMODULE PELoader::loadLibrary(const std::byte* dllBuffer) {
+	PIMAGE_NT_HEADERS imageNtHeaders = getImageNtHeaders((HMODULE)dllBuffer);
 	
 	std::byte* virtualImage = allocateVirtualImage(imageNtHeaders);
-	mapImageHeaders(bufferImagePtr, virtualImage, imageNtHeaders);
-	mapImageSections(bufferImagePtr, virtualImage, imageNtHeaders);
+	mapImageHeaders(dllBuffer, virtualImage, imageNtHeaders);
+	mapImageSections(dllBuffer, virtualImage, imageNtHeaders);
 	
 	applyRelocationFixes(virtualImage, imageNtHeaders);
 	loadImageImports(virtualImage, imageNtHeaders);
