@@ -94,12 +94,12 @@ void PELoader::applyRelocationFixes(std::byte* image, PIMAGE_NT_HEADERS imageNtH
 	}
 
 	while (imageBaseRelocation->VirtualAddress != NULL) {
-		DWORD relocationEntriesCount = (imageBaseRelocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+		DWORD relocationEntriesCount = (imageBaseRelocation->SizeOfBlock - sizeof(PIMAGE_BASE_RELOCATION)) / sizeof(WORD);
 		WORD* relocationEntries = (WORD*)((std::byte*)imageBaseRelocation + sizeof(PIMAGE_BASE_RELOCATION));
 
 		for (int i = 0; i < relocationEntriesCount; i++) {
-			WORD entryType = relocationEntries[i] >> 12;
-			WORD entryOffset = relocationEntries[i] & 0x0FFF;
+			WORD entryType = relocationEntries[i] >> RELOCATION_ENTRY_TYPE_OFFSET;
+			WORD entryOffset = relocationEntries[i] & RELOCATION_ENTRY_OFFSET_MASK;
 
 			if (entryType == IMAGE_REL_BASED_ABSOLUTE) {
 				continue;

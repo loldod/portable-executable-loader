@@ -4,6 +4,9 @@
 #include <vector>
 #include "exceptions.h"
 
+#define RELOCATION_ENTRY_TYPE_OFFSET 12
+#define RELOCATION_ENTRY_OFFSET_MASK 0x0FFF
+
 class PELoader
 {
 public:
