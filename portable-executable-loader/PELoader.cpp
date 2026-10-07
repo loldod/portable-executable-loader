@@ -64,8 +64,11 @@ void PELoader::loadFunctionImport(PBYTE image, const HMODULE importedLibrary, co
 	if (importedFunction == NULL) {
 		throw ImportedFunctionNotFoundException("Could not find imported function in library");
 	}
-
-	importAddressTable->u1.Function = reinterpret_cast<LONGLONG>(importedFunction);
+	#if defined(_WIN64)
+		importAddressTable->u1.Function = reinterpret_cast<LONGLONG>(importedFunction);
+	#elif defined(_WIN32)
+		importAddressTable->u1.Function = reinterpret_cast<DWORD>(importedFunction);
+	#endif
 }
 
 void PELoader::loadLibraryImport(PBYTE image, const PIMAGE_IMPORT_DESCRIPTOR importDescriptor) {
@@ -103,8 +106,8 @@ void PELoader::applyRelocationFixes(PBYTE image, const PIMAGE_NT_HEADERS imageNt
 	}
 
 	while (imageBaseRelocation->VirtualAddress != NULL) {
-		DWORD relocationEntriesCount = (imageBaseRelocation->SizeOfBlock - sizeof(PIMAGE_BASE_RELOCATION)) / sizeof(WORD);
-		PWORD relocationEntries = reinterpret_cast<PWORD>(reinterpret_cast<PBYTE>(imageBaseRelocation) + sizeof(PIMAGE_BASE_RELOCATION));
+		DWORD relocationEntriesCount = (imageBaseRelocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+		PWORD relocationEntries = reinterpret_cast<PWORD>(reinterpret_cast<PBYTE>(imageBaseRelocation) + sizeof(IMAGE_BASE_RELOCATION));
 
 		for (int i = 0; i < relocationEntriesCount; i++) {
 			WORD entryType = relocationEntries[i] >> RELOCATION_ENTRY_TYPE_OFFSET;
