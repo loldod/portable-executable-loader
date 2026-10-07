@@ -10,25 +10,25 @@
 class PELoader
 {
 public:
-	HMODULE loadLibrary(const std::byte* dllBuffer);
+	HMODULE loadLibrary(const PBYTE dllBuffer);
 	void freeLibrary(HMODULE loadAddress);
 	FARPROC getProcAddress(HMODULE moduleAddress, LPCSTR funcName);
 
 private:
 	PIMAGE_NT_HEADERS getImageNtHeaders(const HMODULE libraryModule);
-	std::byte* allocateVirtualImage(const PIMAGE_NT_HEADERS imageNtHeaders);
-	void mapImageHeaders(const std::byte* sourceImage, std::byte* destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders);
-	void mapImageSections(const std::byte* sourceImage, std::byte* destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders);
+	PBYTE allocateVirtualImage(const PIMAGE_NT_HEADERS imageNtHeaders);
+	void mapImageHeaders(const PBYTE sourceImage, PBYTE destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders);
+	void mapImageSections(const PBYTE sourceImage, PBYTE destinationImage, const PIMAGE_NT_HEADERS imageNtHeaders);
 	
-	void loadFunctionImport(std::byte* image, const HMODULE importedLibrary, const PIMAGE_THUNK_DATA importAddressTable);
-	void loadLibraryImport(std::byte* image, const PIMAGE_IMPORT_DESCRIPTOR importDescriptor);
-	void loadImageImports(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders);
+	void loadFunctionImport(PBYTE image, const HMODULE importedLibrary, const PIMAGE_THUNK_DATA importAddressTable);
+	void loadLibraryImport(PBYTE image, const PIMAGE_IMPORT_DESCRIPTOR importDescriptor);
+	void loadImageImports(PBYTE image, const PIMAGE_NT_HEADERS imageNtHeaders);
 	
-	void applyRelocationFixes(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders);
+	void applyRelocationFixes(PBYTE image, const PIMAGE_NT_HEADERS imageNtHeaders);
 
 	BOOL runEntryPoint(const HMODULE libraryModule, const PIMAGE_NT_HEADERS imageNtHeaders, DWORD fdwReason);
 	
-	void freeImportedLibraries(std::byte* image, const PIMAGE_NT_HEADERS imageNtHeaders);
+	void freeImportedLibraries(PBYTE image, const PIMAGE_NT_HEADERS imageNtHeaders);
 };
 
 
