@@ -189,14 +189,17 @@ FARPROC PELoader::getProcAddress(HMODULE moduleAddress, LPCSTR funcName) {
 	
 	auto exportFunctionsNamesRVA = reinterpret_cast<PDWORD>(image + imageExportDirectory->AddressOfNames);
 	auto exportFunctionsAddressesRVA = reinterpret_cast<PDWORD>(image + imageExportDirectory->AddressOfFunctions);
+	auto exportFunctionsOrdinalsRVA = reinterpret_cast<PWORD>(image + imageExportDirectory->AddressOfNameOrdinals);
 
 	LPCSTR exportedFunctionName = NULL;
+	WORD ordinalIndex = NULL;
 
 	for (int i = 0; i < imageExportDirectory->NumberOfNames; i++) {
 		exportedFunctionName = reinterpret_cast<LPCSTR>(image + exportFunctionsNamesRVA[i]);
 
 		if (strcmp(exportedFunctionName, funcName) == 0) {
-			return reinterpret_cast<FARPROC>(image + exportFunctionsAddressesRVA[i]);
+			ordinalIndex = exportFunctionsOrdinalsRVA[i];
+			return reinterpret_cast<FARPROC>(image + exportFunctionsAddressesRVA[ordinalIndex]);
 		}
 	}
 
